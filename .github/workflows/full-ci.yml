@@ -1,0 +1,48 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+name: Full CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  correctness:
+    name: Correctness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check Git whitespace
+        run: git diff --check HEAD^ HEAD
+
+      - name: Validate agent delivery contracts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          footer = "<!-- © 2026 aiaiaiai · aiaiaiai.org -->\n"
+          for name in ("AGENTS.md", "CLAUDE.md"):
+              content = Path(name).read_text(encoding="utf-8")
+              assert content.startswith(f"# {name}\n"), f"{name}: missing title"
+              assert content.endswith(footer), f"{name}: missing copyright footer"
+              for required in (
+                  "GitHub delivery",
+                  "Shared-account co-authorship",
+                  "75973992",
+                  "300452669",
+                  "Co-authored-by:",
+              ):
+                  assert required in content, f"{name}: missing {required}"
+          PY
+
+      - name: Check Claude hook syntax
+        run: bash -n .claude/hooks/ssh-signing.sh
