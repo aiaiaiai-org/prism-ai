@@ -30,17 +30,27 @@ jobs:
           from pathlib import Path
 
           footer = "<!-- © 2026 aiaiaiai · aiaiaiai.org -->\n"
-          for name in ("AGENTS.md", "CLAUDE.md"):
-              content = Path(name).read_text(encoding="utf-8")
-              assert content.startswith(f"# {name}\n"), f"{name}: missing title"
-              assert content.endswith(footer), f"{name}: missing copyright footer"
-              for required in (
+          required_by_name = {
+              "AGENTS.md": (
                   "GitHub delivery",
                   "Shared-account co-authorship",
                   "75973992",
                   "300452669",
                   "Co-authored-by:",
-              ):
+              ),
+              "CLAUDE.md": (
+                  "GitHub delivery",
+                  "Commit attribution",
+                  "75973992",
+                  "x0skai@aiaiaiai.org",
+                  "Co-authored-by:",
+              ),
+          }
+          for name, required_terms in required_by_name.items():
+              content = Path(name).read_text(encoding="utf-8")
+              assert content.startswith(f"# {name}\n"), f"{name}: missing title"
+              assert content.endswith(footer), f"{name}: missing copyright footer"
+              for required in required_terms:
                   assert required in content, f"{name}: missing {required}"
           PY
 
