@@ -1,14 +1,23 @@
-aiaiaiai artificial-intelligence
+aiaiaiai prism-ai · services/tts
 © 2026 aiaiaiai · aiaiaiai.org
 
 Licensed under the Apache License, Version 2.0.
 See LICENSE for the complete license terms.
 
-Runtime dependencies:
+Portions originated in the aiaiaiai artificial-intelligence repository
+(draft pull request #23, closed and superseded by this service).
 
-- WebLLM, © MLC contributors, Apache License 2.0
-- loglevel, © Tim Perry, MIT License
+Python dependencies (see requirements.txt), installed from PyPI and not vendored:
 
-Optional model downloaded by the browser at runtime:
+- PyJWT, © the PyJWT authors, MIT License
+- cryptography (installed through PyJWT[crypto]), © the cryptography authors,
+  Apache License 2.0 or BSD-3-Clause
+- gunicorn, © the Gunicorn authors, MIT License
 
-- Qwen3-0.6B, © Qwen Team, Apache License 2.0
+External components, installed and licensed separately by the operator. They are
+not distributed with, and not covered by, this notice or the Apache License above:
+
+- a Piper text-to-speech command-line engine (forks differ in license)
+- FFmpeg built with libopus
+- voice model files and their .onnx.json configuration (license, provenance and
+  permitted use are specific to each model and must be recorded per model)

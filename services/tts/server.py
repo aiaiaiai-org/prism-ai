@@ -15,14 +15,18 @@ ISSUER = "https://auth.aiaiaiai.org"
 AUDIENCE = "prism-ai"
 SCOPE = "tts.synthesize"
 MAX_BODY = 48_000
-MAX_TEXT = 10_000
+# At 14-17 characters of speech per second, 4,000 characters fit the 300 second
+# audio cap. Callers (Whisper) must not send more: no truncation happens here.
+MAX_TEXT = 4_000
 MAX_AUDIO = 10 * 1024 * 1024
 MAX_SECONDS = 300
+LEEWAY = 10  # seconds of clock skew tolerated between AIS and this host
+RETRY_AFTER = "10"
 
 
 class Rejected(Exception):
-    def __init__(self, status, code):
-        self.status, self.code = status, code
+    def __init__(self, status, code, headers=()):
+        self.status, self.code, self.headers = status, code, tuple(headers)
 
 
 class ProductAuthorization:
@@ -30,7 +34,10 @@ class ProductAuthorization:
         parsed = urlsplit(jwks_url)
         if (parsed.scheme, parsed.netloc) != ("https", "auth.aiaiaiai.org"):
             raise ValueError("AIS JWKS must use the pinned HTTPS issuer")
-        self.keys = jwt.PyJWKClient(jwks_url, timeout=3, lifespan=300)
+        # Unknown key IDs may force at most one JWKS refresh per cooldown, so
+        # unauthenticated requests cannot make this service hammer the issuer.
+        # Stated explicitly so a dependency default change cannot remove it.
+        self.keys = jwt.PyJWKClient(jwks_url, timeout=3, lifespan=300, cooldown_duration=30)
 
     def __call__(self, header):
         if not header.startswith("Bearer ") or len(header) > 8192:
@@ -42,7 +49,7 @@ class ProductAuthorization:
                 raise jwt.InvalidTokenError()
             key = self.keys.get_signing_key_from_jwt(token)
             claims = jwt.decode(token, key.key, algorithms=["EdDSA"],
-                                issuer=ISSUER, audience=AUDIENCE,
+                                issuer=ISSUER, audience=AUDIENCE, leeway=LEEWAY,
                                 options={"require": ["iss", "aud", "sub", "iat", "exp"]})
             if type(claims["iat"]) is not int or type(claims["exp"]) is not int:
                 raise jwt.InvalidTokenError()
@@ -62,9 +69,10 @@ def app_factory(authorize, synthesize):
     slot = threading.BoundedSemaphore(1)
 
     def app(env, start):
-        def reply(status, data, content_type="application/json"):
+        def reply(status, data, content_type="application/json", headers=()):
             start(status, [("Content-Type", content_type), ("Content-Length", str(len(data))),
-                           ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff")])
+                           ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff"),
+                           *headers])
             return [data]
 
         try:
@@ -103,7 +111,8 @@ def app_factory(authorize, synthesize):
             except (ValueError, UnicodeError, RecursionError):
                 raise Rejected("422 Unprocessable Entity", "invalid_request") from None
             if not slot.acquire(blocking=False):
-                raise Rejected("429 Too Many Requests", "engine_busy")
+                raise Rejected("429 Too Many Requests", "engine_busy",
+                               [("Retry-After", RETRY_AFTER)])
             try:
                 audio = synthesize(text, voice)
             finally:
@@ -121,7 +130,7 @@ def app_factory(authorize, synthesize):
                 return reply("500 Internal Server Error", b'{"error":"internal_error"}')
             return reply(status, json.dumps({"error": exc.code}).encode())
         except Rejected as exc:
-            return reply(exc.status, json.dumps({"error": exc.code}).encode())
+            return reply(exc.status, json.dumps({"error": exc.code}).encode(), headers=exc.headers)
         except Exception:
             # Do not log request payloads, subprocess output, or exception values.
             return reply("500 Internal Server Error", b'{"error":"internal_error"}')

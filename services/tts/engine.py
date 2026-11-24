@@ -17,9 +17,11 @@ class SpeechFailure(Exception):
 
 class LocalSpeech:
     """External executable boundary; no provider network calls."""
-    def __init__(self, models, *, max_seconds, max_audio):
+    def __init__(self, models, *, max_seconds, max_audio, piper_timeout=75, ffmpeg_timeout=15):
         self.max_seconds = max_seconds
         self.max_audio = max_audio
+        self.piper_timeout = piper_timeout
+        self.ffmpeg_timeout = ffmpeg_timeout
         self.models = {name: Path(path).resolve() for name, path in models.items()}
         self.piper = shutil.which("piper")
         self.ffmpeg = shutil.which("ffmpeg")
@@ -38,14 +40,20 @@ class LocalSpeech:
             try:
                 subprocess.run([self.piper, "-m", str(self.models[voice]), "-f", str(wav)],
                                input=text.encode("utf-8"), stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=75, check=True)
+                               stderr=subprocess.DEVNULL, timeout=self.piper_timeout, check=True)
                 with wave.open(str(wav), "rb") as audio:
-                    if audio.getnframes() / audio.getframerate() > self.max_seconds:
+                    rate = audio.getframerate()
+                    if rate <= 0:
+                        raise RuntimeError("invalid audio")
+                    if audio.getnframes() / rate > self.max_seconds:
                         raise SpeechFailure("audio_too_long")
+                # One byte beyond the limit: oversize output is detected below
+                # instead of being silently truncated at the limit.
                 subprocess.run([self.ffmpeg, "-nostdin", "-v", "error", "-i", str(wav),
-                                "-c:a", "libopus", "-b:a", "32k", "-ac", "1",
+                                "-map_metadata", "-1", "-c:a", "libopus", "-b:a", "32k",
+                                "-ac", "1", "-fs", str(self.max_audio + 1),
                                 "-f", "ogg", str(ogg)], stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=15, check=True)
+                               stderr=subprocess.DEVNULL, timeout=self.ffmpeg_timeout, check=True)
                 if ogg.stat().st_size > self.max_audio:
                     raise SpeechFailure("audio_too_large")
                 result = ogg.read_bytes()
