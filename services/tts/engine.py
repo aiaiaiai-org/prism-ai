@@ -50,12 +50,14 @@ class LocalSpeech:
                         raise RuntimeError("invalid PCM audio")
                     if frames / rate > self.max_seconds:
                         raise SpeechFailure("audio_too_long")
-                    if len(audio.readframes(frames)) != frames * channels * 2:
-                        raise RuntimeError("incomplete audio")
+                    promised = frames * channels * 2
                 result = wav.read_bytes()
+                # One read of the file: the data chunk must fit in it (a canonical header is 44 bytes).
                 if (not result.startswith(b"RIFF") or result[8:12] != b"WAVE"
                         or int.from_bytes(result[4:8], "little") != len(result) - 8):
                     raise RuntimeError("invalid WAV container")
+                if len(result) < 44 + promised:
+                    raise RuntimeError("incomplete audio")
                 return result
             except subprocess.TimeoutExpired:
                 raise SpeechFailure("synthesis_timeout") from None
