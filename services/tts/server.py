@@ -18,7 +18,7 @@ MAX_BODY = 48_000
 # At 14-17 characters of speech per second, 4,000 characters fit the 300 second
 # audio cap. Callers (Whisper) must not send more: no truncation happens here.
 MAX_TEXT = 4_000
-MAX_AUDIO = 10 * 1024 * 1024
+MAX_AUDIO = 60 * 1024 * 1024  # bounded intermediate PCM WAV, not delivery size
 MAX_SECONDS = 300
 LEEWAY = 10  # seconds of clock skew tolerated between AIS and this host
 RETRY_AFTER = "10"
@@ -117,7 +117,7 @@ def app_factory(authorize, synthesize):
                 audio = synthesize(text, voice)
             finally:
                 slot.release()
-            return reply("200 OK", audio, "audio/ogg")
+            return reply("200 OK", audio, "audio/wav")
         except SpeechFailure as exc:
             status = {
                 "unknown_voice": "422 Unprocessable Entity",

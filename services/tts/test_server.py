@@ -21,7 +21,7 @@ from server import (app_factory, ProductAuthorization, Rejected, ISSUER, AUDIENC
 
 class SpeechTests(unittest.TestCase):
     def setUp(self):
-        self.engine = Mock(return_value=b"OggSexample")
+        self.engine = Mock(return_value=b"RIFFexample")
         self.key = Ed25519PrivateKey.generate()
         self.auth = ProductAuthorization(ISSUER + "/jwks")
         self.auth.keys = Mock()
@@ -53,9 +53,9 @@ class SpeechTests(unittest.TestCase):
     def test_authorized(self):
         status, headers, body = self.request(self.token())
         self.assertEqual(status, "200 OK")
-        self.assertEqual(headers["Content-Type"], "audio/ogg")
+        self.assertEqual(headers["Content-Type"], "audio/wav")
         self.assertEqual(headers["Cache-Control"], "no-store")
-        self.assertEqual(body, b"OggSexample")
+        self.assertEqual(body, b"RIFFexample")
         self.engine.assert_called_once_with("Привіт", "uk-UA")
 
     def test_missing_token(self):
@@ -120,7 +120,7 @@ class SpeechTests(unittest.TestCase):
 
         def synthesize(text, voice):
             inner.append(self.request(self.token()))
-            return b"OggSexample"
+            return b"RIFFexample"
 
         self.engine.side_effect = synthesize
         self.assertEqual(self.request(self.token())[0], "200 OK")
@@ -130,7 +130,7 @@ class SpeechTests(unittest.TestCase):
         # The slot is released afterwards.
         inner.clear()
         self.engine.side_effect = None
-        self.engine.return_value = b"OggSexample"
+        self.engine.return_value = b"RIFFexample"
         self.assertEqual(self.request(self.token())[0], "200 OK")
 
     def test_errors_do_not_leak(self):

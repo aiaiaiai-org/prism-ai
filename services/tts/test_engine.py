@@ -1,8 +1,9 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: Apache-2.0
 
-"""Engine boundary tests with fake piper/ffmpeg executables; no real models."""
-import json
+"""Engine boundary tests with a fake Piper executable; no real models."""
+import io
+import wave
 import os
 import stat
 import sys
@@ -32,26 +33,13 @@ with wave.open(out, "wb") as audio:
     audio.setsampwidth(2)
     audio.setframerate(8000)
     audio.writeframes(b"\\0\\0" * int(8000 * seconds))
+if mode == "bad":
+    open(out, "wb").write(b"invalid audio")
 if mode == "zero_rate":
     data = bytearray(open(out, "rb").read())
     data[24:28] = b"\\0\\0\\0\\0"
     open(out, "wb").write(bytes(data))
 """
-
-FFMPEG = """#!{python}
-import os, sys
-args = sys.argv
-log = os.environ.get("FAKE_ARGS_LOG")
-if log:
-    open(log, "w").write("\\n".join(args[1:]))
-mode = os.environ.get("FAKE_FFMPEG", "ok")
-if mode == "fail":
-    sys.exit(1)
-header = b"OggS" + b"\\0" * 22 + b"OpusHead" + b"\\0" * 11
-body = {{"ok": header, "big": header + b"x" * 4096, "bad": b"not an ogg file"}}[mode]
-open(args[-1], "wb").write(body)
-"""
-
 
 class LocalSpeechTests(unittest.TestCase):
     def setUp(self):
@@ -60,7 +48,6 @@ class LocalSpeechTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.install("piper", PIPER)
-        self.install("ffmpeg", FFMPEG)
         self.temp = self.root / "tmp"
         self.temp.mkdir()
         voice = self.root / "voice.onnx"
@@ -68,9 +55,8 @@ class LocalSpeechTests(unittest.TestCase):
         Path(str(voice) + ".json").write_text("{}")
         self.models = {"uk-UA": str(voice)}
         self.stdin_log = self.root / "stdin.bin"
-        self.args_log = self.root / "ffmpeg-args.txt"
         env = {"PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
-               "FAKE_STDIN_LOG": str(self.stdin_log), "FAKE_ARGS_LOG": str(self.args_log)}
+               "FAKE_STDIN_LOG": str(self.stdin_log)}
         patcher = patch.dict(os.environ, env)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -97,18 +83,16 @@ class LocalSpeechTests(unittest.TestCase):
             engine("Привіт", voice)
         return caught.exception.code
 
-    def test_synthesizes_ogg_opus_and_passes_text_only_through_stdin(self):
+    def test_synthesizes_pcm_wav_and_passes_text_only_through_stdin(self):
         audio = self.engine()("Привіт, світе", "uk-UA")
-        self.assertTrue(audio.startswith(b"OggS"))
-        self.assertIn(b"OpusHead", audio[:256])
+        self.assertTrue(audio.startswith(b"RIFF"))
+        self.assertEqual(audio[8:12], b"WAVE")
+        with wave.open(io.BytesIO(audio), "rb") as wav:
+            self.assertEqual(wav.getnchannels(), 1)
+            self.assertEqual(wav.getsampwidth(), 2)
+            self.assertEqual(wav.getframerate(), 8000)
         self.assertEqual(self.stdin_log.read_bytes(), "Привіт, світе".encode("utf-8"))
         self.assertEqual(os.listdir(self.temp), [])
-
-    def test_strips_metadata_and_bounds_output_size_by_one_byte(self):
-        self.engine(max_audio=2048)("текст", "uk-UA")
-        arguments = self.args_log.read_text().split("\n")
-        self.assertEqual(arguments[arguments.index("-map_metadata") + 1], "-1")
-        self.assertEqual(arguments[arguments.index("-fs") + 1], "2049")
 
     def test_unknown_voice(self):
         self.assertEqual(self.failure(self.engine(), "other"), "unknown_voice")
@@ -119,22 +103,20 @@ class LocalSpeechTests(unittest.TestCase):
         self.assertEqual(os.listdir(self.temp), [])
 
     def test_audio_too_large(self):
-        os.environ["FAKE_FFMPEG"] = "big"
         self.assertEqual(self.failure(self.engine(max_audio=1024)), "audio_too_large")
         self.assertEqual(os.listdir(self.temp), [])
 
     def test_invalid_audio_is_a_synthesis_failure(self):
-        os.environ["FAKE_FFMPEG"] = "bad"
+        os.environ["FAKE_PIPER"] = "bad"
         self.assertEqual(self.failure(self.engine()), "synthesis_failed")
 
     def test_zero_sample_rate_is_a_synthesis_failure(self):
         os.environ["FAKE_PIPER"] = "zero_rate"
         self.assertEqual(self.failure(self.engine()), "synthesis_failed")
 
-    def test_failed_executables_are_synthesis_failures(self):
-        for name, variable in (("piper", "FAKE_PIPER"), ("ffmpeg", "FAKE_FFMPEG")):
-            with self.subTest(name), patch.dict(os.environ, {variable: "fail"}):
-                self.assertEqual(self.failure(self.engine()), "synthesis_failed")
+    def test_failed_executable_is_a_synthesis_failure(self):
+        with patch.dict(os.environ, {"FAKE_PIPER": "fail"}):
+            self.assertEqual(self.failure(self.engine()), "synthesis_failed")
         self.assertEqual(os.listdir(self.temp), [])
 
     def test_timeout_is_reported_and_cleans_up(self):
