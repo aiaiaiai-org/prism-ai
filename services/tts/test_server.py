@@ -89,7 +89,7 @@ class SpeechTests(unittest.TestCase):
         self.engine.assert_not_called()
 
     def test_engine_error(self):
-        self.engine.side_effect = SpeechFailure("422 Unprocessable Entity", "unknown_voice")
+        self.engine.side_effect = SpeechFailure("unknown_voice")
         self.assertEqual(self.request(self.token())[0], "422 Unprocessable Entity")
 
 

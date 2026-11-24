@@ -109,7 +109,18 @@ def app_factory(authorize, synthesize):
             finally:
                 slot.release()
             return reply("200 OK", audio, "audio/ogg")
-        except (Rejected, SpeechFailure) as exc:
+        except SpeechFailure as exc:
+            status = {
+                "unknown_voice": "422 Unprocessable Entity",
+                "audio_too_long": "422 Unprocessable Entity",
+                "audio_too_large": "422 Unprocessable Entity",
+                "synthesis_timeout": "504 Gateway Timeout",
+                "synthesis_failed": "502 Bad Gateway",
+            }.get(exc.code)
+            if status is None:
+                return reply("500 Internal Server Error", b'{"error":"internal_error"}')
+            return reply(status, json.dumps({"error": exc.code}).encode())
+        except Rejected as exc:
             return reply(exc.status, json.dumps({"error": exc.code}).encode())
         except Exception:
             # Do not log request payloads, subprocess output, or exception values.
