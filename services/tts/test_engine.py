@@ -28,13 +28,24 @@ if mode == "fail":
 if mode == "sleep":
     time.sleep(30)
 seconds = 2 if mode == "long" else 0.5
+rate = {{"bad_rate": 4000, "stereo": 48000}}.get(mode, 8000)
+channels = 2 if mode == "stereo" else 1
 with wave.open(out, "wb") as audio:
-    audio.setnchannels(1)
+    audio.setnchannels(channels)
     audio.setsampwidth(2)
-    audio.setframerate(8000)
-    audio.writeframes(b"\\0\\0" * int(8000 * seconds))
+    audio.setframerate(rate)
+    audio.writeframes(b"\\0\\0" * channels * int(rate * seconds))
 if mode == "bad":
     open(out, "wb").write(b"invalid audio")
+if mode == "truncated":
+    # The data chunk promises more than the file holds, yet the RIFF size matches the file.
+    data = bytearray(open(out, "rb").read()[:-100])
+    data[4:8] = (len(data) - 8).to_bytes(4, "little")
+    open(out, "wb").write(bytes(data))
+if mode == "riff_size":
+    data = bytearray(open(out, "rb").read())
+    data[4:8] = (len(data) - 7).to_bytes(4, "little")
+    open(out, "wb").write(bytes(data))
 if mode == "zero_rate":
     data = bytearray(open(out, "rb").read())
     data[24:28] = b"\\0\\0\\0\\0"
@@ -108,6 +119,24 @@ class LocalSpeechTests(unittest.TestCase):
 
     def test_invalid_audio_is_a_synthesis_failure(self):
         os.environ["FAKE_PIPER"] = "bad"
+        self.assertEqual(self.failure(self.engine()), "synthesis_failed")
+
+    def test_accepts_the_widest_pcm_the_size_cap_allows(self):
+        os.environ["FAKE_PIPER"] = "stereo"
+        with wave.open(io.BytesIO(self.engine()("текст", "uk-UA")), "rb") as wav:
+            self.assertEqual((wav.getnchannels(), wav.getframerate()), (2, 48000))
+
+    def test_unsupported_sample_rate_is_a_synthesis_failure(self):
+        os.environ["FAKE_PIPER"] = "bad_rate"
+        self.assertEqual(self.failure(self.engine()), "synthesis_failed")
+
+    def test_truncated_audio_is_a_synthesis_failure(self):
+        os.environ["FAKE_PIPER"] = "truncated"
+        self.assertEqual(self.failure(self.engine()), "synthesis_failed")
+        self.assertEqual(os.listdir(self.temp), [])
+
+    def test_inconsistent_riff_size_is_a_synthesis_failure(self):
+        os.environ["FAKE_PIPER"] = "riff_size"
         self.assertEqual(self.failure(self.engine()), "synthesis_failed")
 
     def test_zero_sample_rate_is_a_synthesis_failure(self):
