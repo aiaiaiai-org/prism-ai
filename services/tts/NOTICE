@@ -18,6 +18,5 @@ External components, installed and licensed separately by the operator. They are
 not distributed with, and not covered by, this notice or the Apache License above:
 
 - a Piper text-to-speech command-line engine (forks differ in license)
-- FFmpeg built with libopus
 - voice model files and their .onnx.json configuration (license, provenance and
   permitted use are specific to each model and must be recorded per model)
