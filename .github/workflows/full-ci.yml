@@ -56,3 +56,14 @@ jobs:
 
       - name: Check Claude hook syntax
         run: bash -n .claude/hooks/ssh-signing.sh
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install TTS dependencies
+        run: python -m pip install -r services/tts/requirements.txt
+
+      - name: Run TTS contract tests
+        run: python -m unittest discover -s services/tts -p 'test_*.py'
