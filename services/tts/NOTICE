@@ -14,9 +14,23 @@ Python dependencies (see requirements.txt), installed from PyPI and not vendored
   Apache License 2.0 or BSD-3-Clause
 - gunicorn, © the Gunicorn authors, MIT License
 
-External components, installed and licensed separately by the operator. They are
-not distributed with, and not covered by, this notice or the Apache License above:
+External components. The Dockerfile in this directory downloads them at build time, each
+pinned by checksum, into the published image. They are not part of this repository and are not
+covered by the Apache License above:
 
-- a Piper text-to-speech command-line engine (forks differ in license)
-- voice model files and their .onnx.json configuration (license, provenance and
-  permitted use are specific to each model and must be recorded per model)
+- Piper command-line engine 2023.11.14-2, https://github.com/rhasspy/piper, © Michael Hansen,
+  MIT License. Its release archive also bundles espeak-ng (and libespeak-ng,
+  piper-phonemize), © the espeak-ng authors, GNU GPL-3.0-or-later. The image therefore
+  redistributes GPL-3.0 components; they run only as a separate process (the `piper`
+  executable) and are not linked into this service. Source:
+  https://github.com/espeak-ng/espeak-ng
+  Archive SHA-256 a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992.
+- Voice uk_UA-ukrainian_tts-medium (3 speakers; the service uses the default, `lada`),
+  https://huggingface.co/rhasspy/piper-voices at revision
+  5ec43b186ef915a195d3ddbcfd9916e76c503c3f. Dataset: https://github.com/OHF-Voice/voice-datasets,
+  CC0 (per the model card), trained from scratch. SHA-256 of the .onnx
+  7920419ac5f6fd8b6450520f24b52ed5a319cb53dd018fbcd71c9e079cbac84f, of the .onnx.json
+  4e96e72917ca9b94edc77d6ccfee03a73f450ba2fc1ca93c2e562bc014e5aa55.
+
+Changing the engine or the voice means updating the pins here and in the Dockerfile after
+auditing the new license, provenance and checksum.
