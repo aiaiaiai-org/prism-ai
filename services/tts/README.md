@@ -6,10 +6,10 @@ Authorization: AIS EdDSA product access token (typ at+jwt), issuer https://auth.
 
 From this directory, install requirements into a virtual environment, then run:
 
-    gunicorn --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:8080 'server:create_app()'
+    gunicorn --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:1927 'server:create_app()'
 
 Keep one worker per instance; the engine is limited to one in-flight request. Reverse proxy must enforce HTTPS, request body limit 48000 bytes, bounded connections and per-product ingress quotas; disable body capture and use redacted request telemetry. Maximum text 4000 characters (about 285 seconds of speech at 14-17 characters per second, an estimate that depends on the voice) and intermediate PCM WAV 300 seconds / 60 MiB; requests over limits fail rather than truncate, so callers must keep their selection within 4000 characters. A busy engine answers 429 with Retry-After: 10. No output is cached. Readiness requires local engine, model and config files; real speech synthesis, model performance, resource limits, product grants and ingress still need deployment smoke tests. Do not expose this service publicly before those checks. The transferred adapter source files' Apache-2.0 license (see LICENSE and NOTICE in this directory) does not cover external engine or model artifacts.
 
-CI builds the image and `smoke.sh` synthesizes real speech through it (engine, voice and container user together). The container listens on 8080 with `TTS_MODELS` set to `{"uk-UA": ...}` and `TTS_AIS_JWKS_URL` to the issuer's JWKS; it holds no secret.
+CI builds the image and `smoke.sh` synthesizes real speech through it (engine, voice and container user together). The container listens on 1927 (the port infra's contracts require) with `TTS_MODELS` set to `{"uk-UA": ...}` and `TTS_AIS_JWKS_URL` to the issuer's JWKS; it holds no secret.
 
 Unit tests (HTTP contract, token validation and the engine boundary against a fake Piper executable, no real models): python -m unittest discover -s services/tts -p 'test_*.py' from repository root.

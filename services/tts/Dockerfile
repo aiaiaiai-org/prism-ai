@@ -40,8 +40,8 @@ ENV PATH=/opt/piper:$PATH \
     TTS_MODELS='{"uk-UA":"/opt/voices/uk_UA-ukrainian_tts-medium.onnx"}' \
     TTS_AIS_JWKS_URL=https://auth.aiaiaiai.org/.well-known/jwks.json
 USER tts
-EXPOSE 8080
+EXPOSE 1927
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"
+    CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:1927/healthz', timeout=3)"
 # One worker: the engine admits one request at a time (a second gets 429).
-CMD ["gunicorn", "--workers", "1", "--threads", "4", "--timeout", "120", "--bind", "0.0.0.0:8080", "server:create_app()"]
+CMD ["gunicorn", "--workers", "1", "--threads", "4", "--timeout", "120", "--bind", "0.0.0.0:1927", "server:create_app()"]
